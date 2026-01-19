@@ -2,26 +2,46 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Code Critters: Player Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Code Critters: Mobile Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
+        * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; touch-action: none; }
         canvas { display: block; }
         #ui {
             position: absolute; top: 15px; left: 15px; color: #00ff00;
-            pointer-events: none; line-height: 1.4; text-shadow: 2px 2px #000; z-index: 10;
+            pointer-events: none; line-height: 1.2; text-shadow: 2px 2px #000; z-index: 10; font-size: 14px;
         }
-        .player-stats { color: #00f2ff; font-weight: bold; border: 1px solid #00f2ff; padding: 5px; margin-top: 10px; }
+        .player-stats { color: #00f2ff; font-weight: bold; border: 1px solid #00f2ff; padding: 5px; margin-top: 5px; background: rgba(0,0,0,0.5); }
+        
+        /* Mobil Kontroller */
+        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; pointer-events: none; }
+        .btn { 
+            width: 70px; height: 70px; background: rgba(255,255,255,0.1); 
+            border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; 
+            color: white; pointer-events: auto; font-weight: bold;
+        }
+        #joystick-area { width: 120px; height: 120px; background: rgba(255,255,255,0.05); border-radius: 50%; position: relative; }
+        #joystick-stick { width: 50px; height: 50px; background: rgba(0, 242, 255, 0.4); border-radius: 50%; position: absolute; top: 35px; left: 35px; }
     </style>
 </head>
 <body>
     <div id="ui">
-        DURUM: <span id="status">Karakterini Yarat: [Son Harf] + ENTER</span><br>
         POPÜLASYON: <span id="count">0</span><br>
         <div id="playerUI" class="player-stats" style="display:none;">
-            OYUNCU HP: <span id="pHP">100</span> | BOYUT: <span id="pSize">20</span>
+            HP: <span id="pHP">100</span> | BOYUT: <span id="pSize">20</span>
         </div>
+        <div id="status" style="margin-top:5px; font-size: 11px; color: #888;">Dokun veya Yaz!</div>
     </div>
+
+    <div id="controls">
+        <div id="joystick-area">
+            <div id="joystick-stick"></div>
+        </div>
+        <div class="btn" id="spawnBtn">SPAWN</div>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -38,109 +58,149 @@ canvas.height = window.innerHeight;
 
 let critters = [];
 let player = null;
-let lastKey = 'P';
+let lastKey = 'A';
 let keys = {};
+let joystick = { active: false, x: 0, y: 0, startX: 0, startY: 0 };
 
-// Klavye takibi (Ok tuşları için)
+// --- KLAVYE KONTROLLERİ ---
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.key.length === 1) lastKey = e.key.toUpperCase();
-    
-    // ENTER ile Oyuncu karakterini yarat
-    if (e.code === 'Enter') {
-        player = new Critter(lastKey, canvas.width/2, canvas.height/2, 'player');
-        playerUI.style.display = 'block';
-        statusEl.innerText = "Karakter Kontrol Ediliyor!";
-    }
-    
-    // Normal canlı üretme (Space hariç)
-    if (e.key.length === 1 && e.code !== 'Space' && e.code !== 'Enter') {
-        critters.push(new Critter(e.key, Math.random()*canvas.width, Math.random()*canvas.height, 'normal'));
-    }
+    if (e.code === 'Enter') createPlayer();
+    if (e.key.length === 1 && e.code !== 'Space' && e.code !== 'Enter') spawnCritter(e.key);
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+// --- MOBİL / DOKUNMATİK KONTROLLER ---
+const jArea = document.getElementById('joystick-area');
+const jStick = document.getElementById('joystick-stick');
+const spawnBtn = document.getElementById('spawnBtn');
+
+function createPlayer() {
+    player = new Critter(lastKey, canvas.width/2, canvas.height/2, 'player');
+    playerUI.style.display = 'block';
+    statusEl.innerText = "Karakter Aktif!";
+}
+
+function spawnCritter(char) {
+    critters.push(new Critter(char, Math.random()*canvas.width, Math.random()*canvas.height, 'normal'));
+}
+
+spawnBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    createPlayer();
+});
+
+// Joystick Mantığı
+jArea.addEventListener('touchstart', (e) => {
+    joystick.active = true;
+    const touch = e.touches[0];
+    const rect = jArea.getBoundingClientRect();
+    joystick.startX = rect.left + rect.width / 2;
+    joystick.startY = rect.top + rect.height / 2;
+});
+
+window.addEventListener('touchmove', (e) => {
+    if (!joystick.active) return;
+    const touch = e.touches[0];
+    let dx = touch.clientX - joystick.startX;
+    let dy = touch.clientY - joystick.startY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const maxDist = 40;
+
+    if (dist > maxDist) {
+        dx *= maxDist / dist;
+        dy *= maxDist / dist;
+    }
+
+    joystick.x = dx / maxDist;
+    joystick.y = dy / maxDist;
+    jStick.style.transform = `translate(${dx}px, ${dy}px)`;
+}, { passive: false });
+
+window.addEventListener('touchend', () => {
+    joystick.active = false;
+    joystick.x = 0;
+    joystick.y = 0;
+    jStick.style.transform = `translate(0px, 0px)`;
+});
+
+// Ekrana her dokunulduğunda rastgele bir harf üret (Mobil için kolaylık)
+canvas.addEventListener('touchstart', (e) => {
+    if (e.target === canvas) {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        spawnCritter(chars[Math.floor(Math.random()*chars.length)]);
+    }
+});
 
 class Critter {
     constructor(char, x, y, type = 'normal') {
         this.char = char.toUpperCase();
         this.x = x; this.y = y;
         this.type = type;
-        this.hp = type === 'player' ? 200 : (type === 'boss' ? 5000 : (type === 'mutant' ? 700 : 100));
-        this.size = type === 'player' ? 25 : (type === 'boss' ? 80 : (type === 'mutant' ? 30 : 12));
-        this.speed = type === 'player' ? 4 : (type === 'boss' ? 0.6 : (type === 'mutant' ? 3.5 : 1.8));
+        this.hp = type === 'player' ? 250 : 100;
+        this.size = type === 'player' ? 25 : 12;
+        this.speed = type === 'player' ? 5 : 2;
         this.angle = Math.random() * Math.PI * 2;
-        this.color = type === 'player' ? '#00f2ff' : (type === 'boss' ? '#222' : (type === 'mutant' ? '#fff' : `hsl(${Math.random()*360},70%,60%)`));
+        this.color = type === 'player' ? '#00f2ff' : `hsl(${Math.random()*360},70%,60%)`;
     }
 
     update() {
         if (this.type === 'player') {
-            // Oyuncu Kontrolleri
-            if (keys['ArrowUp']) this.y -= this.speed;
-            if (keys['ArrowDown']) this.y += this.speed;
-            if (keys['ArrowLeft']) this.x -= this.speed;
-            if (keys['ArrowRight']) this.x += this.speed;
-            this.hp -= 0.05; // Hareket ettikçe enerji harcar
-        } else {
-            // AI Hareket (Mutant/Normal/Boss)
-            let target = (player && this.type !== 'normal') ? player : null; 
-            if (!target) {
-                this.angle += (Math.random() - 0.5) * 0.2;
-            } else {
-                let targetAngle = Math.atan2(target.y - this.y, target.x - this.x);
-                this.angle += (targetAngle - this.angle) * 0.1;
+            // Klavye + Joystick birleşimi
+            let mvX = 0; let mvY = 0;
+            if (keys['ArrowUp'] || keys['KeyW']) mvY = -1;
+            if (keys['ArrowDown'] || keys['KeyS']) mvY = 1;
+            if (keys['ArrowLeft'] || keys['KeyA']) mvX = -1;
+            if (keys['ArrowRight'] || keys['KeyD']) mvX = 1;
+
+            if (joystick.active) {
+                mvX = joystick.x;
+                mvY = joystick.y;
             }
+
+            this.x += mvX * this.speed;
+            this.y += mvY * this.speed;
+            this.hp -= 0.03;
+        } else {
             this.x += Math.cos(this.angle) * this.speed;
             this.y += Math.sin(this.angle) * this.speed;
-            this.hp -= 0.1;
+            if (Math.random() < 0.02) this.angle += (Math.random()-0.5);
+            this.hp -= 0.08;
         }
 
-        // Ekran Sınırları
-        this.x = Math.max(0, Math.min(canvas.width, this.x));
-        this.y = Math.max(0, Math.min(canvas.height, this.y));
+        // Kenar Kontrolü
+        if (this.x < 0) this.x = canvas.width;
+        if (this.x > canvas.width) this.x = 0;
+        if (this.y < 0) this.y = canvas.height;
+        if (this.y > canvas.height) this.y = 0;
     }
 
     draw() {
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.shadowBlur = (this.type === 'player' || this.type === 'boss') ? 20 : 0;
-        ctx.shadowColor = this.color;
+        if(this.type === 'player') {
+            ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+        }
         ctx.fillStyle = this.color;
         ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
-        ctx.fillStyle = (this.type === 'mutant' || this.type === 'player') ? '#000' : '#fff';
-        ctx.font = `bold ${this.size * 0.6}px monospace`;
+        ctx.fillStyle = this.type === 'player' ? '#000' : '#fff';
+        ctx.font = `bold ${this.size * 0.7}px monospace`;
         ctx.textAlign = "center";
         ctx.fillText(this.char, 0, this.size/4);
         ctx.restore();
     }
 }
 
-// Çarpışma ve Yeme Sistemi
 function handleInteractions() {
     let all = player ? [player, ...critters] : critters;
-    
     for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
-            let a = all[i];
-            let b = all[j];
+            let a = all[i]; let b = all[j];
             let d = Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
-
             if (d < (a.size + b.size) / 2) {
-                // Kim kimi yer? (Boss > Mutant > Player > Normal)
-                let eater = null;
-                let victim = null;
-
-                if (a.type === 'boss' && b.type !== 'boss') { eater = a; victim = b; }
-                else if (b.type === 'boss' && a.type !== 'boss') { eater = b; victim = a; }
-                else if (a.type === 'player' && b.type === 'normal') { eater = a; victim = b; }
-                else if (b.type === 'player' && a.type === 'normal') { eater = b; victim = a; }
-                
-                if (eater && victim) {
-                    victim.hp -= 2;
-                    eater.hp += 1;
-                    if(eater.type === 'player') {
-                        eater.size += 0.05;
-                    }
-                }
+                if (a.type === 'player' && b.type === 'normal') { b.hp -= 5; a.hp += 1; a.size += 0.1; }
+                else if (b.type === 'player' && a.type === 'normal') { a.hp -= 5; b.hp += 1; b.size += 0.1; }
             }
         }
     }
@@ -153,20 +213,14 @@ function animate() {
     handleInteractions();
 
     if (player) {
-        player.update();
-        player.draw();
+        player.update(); player.draw();
         pHP.innerText = Math.floor(player.hp);
         pSize.innerText = Math.floor(player.size);
-        if (player.hp <= 0) {
-            player = null;
-            playerUI.style.display = 'none';
-            statusEl.innerText = "ÖLDÜN! Tekrar Yarat: ENTER";
-        }
+        if (player.hp <= 0) { player = null; playerUI.style.display = 'none'; statusEl.innerText = "Öldün!"; }
     }
 
     for (let i = critters.length - 1; i >= 0; i--) {
-        critters[i].update();
-        critters[i].draw();
+        critters[i].update(); critters[i].draw();
         if (critters[i].hp <= 0) critters.splice(i, 1);
     }
 
